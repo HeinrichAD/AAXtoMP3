@@ -6,7 +6,7 @@
 
 # Usage Synopsis.
 usage=$'\nUsage: AAXtoMP3 [--flac] [--aac] [--opus ] [--single] [--level <COMPRESSIONLEVEL>]
-[--chaptered] [-e:mp3] [-e:m4a] [-e:m4b] [--authcode <AUTHCODE>] [--no-clobber]
+[--chaptered [--keep-single-file-output]] [-e:mp3] [-e:m4a] [-e:m4b] [--authcode <AUTHCODE>] [--no-clobber]
 [--target_dir <PATH>] [--complete_dir <PATH>] [--validate] [--loglevel <LOGLEVEL>]
 [--keep-author <N>] [--author <AUTHOR>] [--{dir,file,chapter}-naming-scheme <STRING>]  
 [--use-audible-cli-data] [--continue <CHAPTERNUMBER>] {FILES}\n'
@@ -14,6 +14,7 @@ codec=libmp3lame            # Default encoder.
 extension=mp3               # Default encoder extension.
 level=-1                    # Compression level. Can be given for mp3, flac and opus. -1 = default/not specified.
 mode=chaptered              # Multi file output
+keepSingleFileOutput=0      # Optional default off, if set and mode=chaptered keep the "big" single output file.
 auth_code=                  # Required to be set via file or option.
 targetdir=                  # Optional output location.  Note default is basedir of AAX file.
 dirNameScheme=              # Custom directory naming scheme, default is $genre/$author/$title
@@ -51,6 +52,8 @@ while true; do
     -s | --single     ) mode=single;                                                    shift ;;
                       # If appropriate use only a single file output.
     -c | --chaptered  ) mode=chaptered;                                                 shift ;;
+                      # Keep "big" single output file in chaptered mode.
+    --keep-single-file-output ) keepSingleFileOutput=1;                                 shift ;;
                       # This is the same as --single option.
     -e:mp3            ) codec=libmp3lame; extension=mp3; mode=single; container=mp3;    shift ;;
                       # Identical to --acc option.
@@ -198,7 +201,7 @@ progressbar() {
   echo -ne "Chapter splitting: |$progressbar| $print_percentage% ($part/$total chapters)\r"
 }
 # Print out what we have already after command line processing.
-debug_vars "Command line options as set" codec extension mode container targetdir completedir auth_code keepArtist authorOverride audibleCli
+debug_vars "Command line options as set" codec extension mode container targetdir completedir auth_code keepArtist authorOverride audibleCli keepSingleFileOutput
 
 # ========================================================================
 # Variable validation
@@ -899,14 +902,18 @@ do
     done 9< "$metadata_file"
 
     # Clean up of working directory stuff.
-    rm "${output_file}"
+    if [ "${keepSingleFileOutput}" == "0" ]; then
+      rm "${output_file}"
+    fi
     if [ "$((${loglevel} > 1))" == "1" ]; then
       log "Done creating chapters for ${output_directory}."
     else
       #ending progress bar
       echo ""
     fi
-  else
+  fi
+
+  if [ -f "${output_file}" ]; then
     # Perform file tasks on output file.
     # ----
     # ffmpeg seems to copy only chapter position, not chapter names.
