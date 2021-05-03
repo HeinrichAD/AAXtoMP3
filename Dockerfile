@@ -4,8 +4,9 @@ ENV DEBIAN_FRONTEND noninteractive
 
 # ffmpeg, ffprobe
 # mediainfo
+# libmp3lame
 RUN apt-get update  && \
-    apt-get install -y ffmpeg x264 x265 bc mediainfo
+    apt-get install -y ffmpeg x264 x265 bc mediainfo libmp3lame0
 
 # mp4art, mp4chaps
 RUN apt-get install -y wget                                   && \
