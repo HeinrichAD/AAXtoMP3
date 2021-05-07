@@ -10,12 +10,20 @@
 # ===Variables====================================================================================================================================
 
 # Help message
-help=$'\nUsage: interactiveAAXtoMP3 [--advanced] [--help]\n
---advanced	More options
---help		Print this message\n'
+help=$'\nUsage: interactiveAAXtoMP3 [--advanced] [--fancy] [--config FILE] [--noconfirm] [--noclobber] [--help]\n
+-f, --fancy         Use whiptail to display fancy dialog boxes
+-c, --config FILE   Path to config file wtih default settings
+    --noconfirm     Use defaults and do not ask for any option confirmation
+-n, --noclobber     Do not overwrite an existing file (e.g. config)
+-a, --advanced      More options
+-h, --help		      Print this message\n'
 summary=""         # This will contain a summary of the options allready set.
 call="./AAXtoMP3"  # This will contain the call for AAXtoMP3.
 advanced=0         # Toggles advanced options on or off.
+dialog=            # Tool for fancy dialog boxes.
+config=".interactivesave"  # Path to config file wtih default settings
+noconfirm=0        # Use defaults and do not ask for any option confirmation.
+noclobber=0        # Do not overwrite an existing file (e.g. config).
 
 # ===Options======================================================================================================================================
 
@@ -23,6 +31,14 @@ while true; do
   case "$1" in
                      # Advanced options.
     -a | --advanced  ) advanced=1;      shift ;;
+                     # Use whiptail to display fancy dialog boxes.
+    -f | --fancy     ) dialog=whiptail; shift ;;
+                     # Path to config file wtih default settings.
+    -c | --config    ) config="$2";     shift 2 ;;
+                     # Use defaults and do not ask for any option confirmation.
+    --noconfirm      ) noconfirm=1;     shift ;;
+                     # Do not overwrite an existing file (e.g. config).
+    -n, --noclobber  ) noclobber=1;     shift ;;
                      # Command synopsis.
     -h | --help      ) echo -e "$help"; exit ;;
                      # Anything else stops command line processing.
@@ -50,6 +66,20 @@ if ! [[ $(type -P "$SED") ]]; then
   exit 1
 fi
 
+if [[ "$dialog" == "whiptail" && `which whiptail 3>&1 2>&3 1> /dev/null` ]]; then
+  echo "ERROR whiptail was not found on your env PATH variable"
+  echo "Without it, this script will break."
+  echo "INSTALL:"
+  echo "Ubuntu:  sudo apt-get update; sudo apt-get install whiptail"
+  exit 1
+fi
+
+if [[ -r "$config" ]]; then
+  echo "WARN config file not found or not readable."
+  echo "Without it, this script fallback to default settings."
+  noconfirm=
+fi
+
 # ===Get options from last time===================================================================================================================
 
 # ===Set default values===
@@ -60,16 +90,16 @@ lastauthcode=""
 lastloglevel="1"
 
 # ===Get Values from last time===
-if [ -f ".interactivesave" ]; then
-  for ((i=1;i<=$(wc -l .interactivesave | cut -d " " -f 1);i++)) do
-    line=$(head -$i .interactivesave | tail -1)
+if [ -f "$config" ]; then
+  for ((i=1; i<=$(wc -l "$config" | cut -d " " -f 1); i++)) do
+    line=$(head -$i "$config" | tail -1)
     case $(echo $line | cut -d " " -f 1 | $SED 's/.$//') in
-      codec        ) lastcodec="$(echo $line | cut -d " " -f 2)";;
-      compression  ) lastcompression="$(echo $line | cut -d " " -f 2)";;
-      chapters     ) lastchapters="$(echo $line | cut -d " " -f 2)";;
-      authcode     ) lastauthcode="$(echo $line | cut -d " " -f 2)";;
-      loglevel     ) lastloglevel="$(echo $line | cut -d " " -f 2)";;
-      *            ) rm .interactivesave; exit 1;;
+      codec        ) lastcodec="$(echo $line | awk -F" " '{print $NF}')";;
+      compression  ) lastcompression="$(echo $line | awk -F" " '{print $NF}')";;
+      chapters     ) lastchapters="$(echo $line | awk -F" " '{print $NF}')";;
+      authcode     ) lastauthcode="$(echo $line | awk -F" " '{print $NF}')";;
+      loglevel     ) lastloglevel="$(echo $line | awk -F" " '{print $NF}')";;
+      *            ) echo "ERROR config file line $i"; exit 1;;
     esac
   done
 fi
@@ -77,83 +107,223 @@ fi
 # ===Get options for AAXtoMP3=====================================================================================================================
 
 # ===Codec===
+if [[ "$noconfirm" == "1" ]]; then
+  codec=$lastcodec
+fi
 while true; do
-  clear;
-  read -e -p "codec (mp3/m4a/m4b/flac/aac/opus): " -i "$lastcodec" codec
+  # check
   case "$codec" in
-    mp3   ) summary="$summary""codec: $codec"; call="$call -e:mp3"; break;;
-    m4a   ) summary="$summary""codec: $codec"; call="$call -e:m4a"; break;;
-    m4b   ) summary="$summary""codec: $codec"; call="$call -e:m4b"; break;;
-    flac  ) summary="$summary""codec: $codec"; call="$call --flac"; break;;
-    aac   ) summary="$summary""codec: $codec"; call="$call --aac";  break;;
-    opus  ) summary="$summary""codec: $codec"; call="$call --opus"; break;;
+    mp3   ) summary="$summary""codec:    $codec"; call="$call -e:mp3"; break;;
+    m4a   ) summary="$summary""codec:    $codec"; call="$call -e:m4a"; break;;
+    m4b   ) summary="$summary""codec:    $codec"; call="$call -e:m4b"; break;;
+    flac  ) summary="$summary""codec:    $codec"; call="$call --flac"; break;;
+    aac   ) summary="$summary""codec:    $codec"; call="$call --aac";  break;;
+    opus  ) summary="$summary""codec:    $codec"; call="$call --opus"; break;;
   esac
+  # ask
+  if [[ "$dialog" ]]; then
+    codec=`$dialog --title "Codec" --menu --default-item "$lastcodec" \
+      "Choose codec" 15 30 6 \
+      "mp3"   ""  \
+      "m4a"   ""  \
+      "m4b"   ""  \
+      "flac"  ""  \
+      "aac"   ""  \
+      "opus"  ""  \
+      3>&1 1>&2 2>&3`
+    if [[ $? != 0 ]]; then
+      exit 2  # user canceled
+    fi
+  else
+    clear
+    read -e -p "codec (mp3/m4a/m4b/flac/aac/opus): " -i "$lastcodec" codec
+  fi
 done
 
 # ===Compression===
+if [[ "$noconfirm" == "1" ]]; then
+  compression=$lastcompression
+fi
+case "$codec" in
+  mp3   ) maxlevel=9;;
+  flac  ) maxlevel=12;;
+  opus  ) maxlevel=10;;
+  *     ) break;;
+esac
 while true; do
-  clear; echo -e "$summary"
-  case "$codec" in
-    mp3   ) maxlevel=9;;
-    flac  ) maxlevel=12;;
-    opus  ) maxlevel=10;;
-    *     ) break;;
-  esac
-  read -e -p "compression level (0-$maxlevel): " -i "$lastcompression" compression
+  # check
   if [[ $compression =~ ^[0-9]+$ ]] && [[ "$compression" -ge "0" ]] && [[ "$compression" -le "$maxlevel" ]]; then
     summary="$summary""\ncompression level: $compression"
     call="$call --level $compression"
     break
   fi
+  # ask
+  if [[ "$dialog" ]]; then
+    choices=()
+    for (( n=0; n<=$maxlevel; n++ )); do choices+=($n ""); done
+    compression=`$dialog --title "Compression" --menu --default-item "$lastcompression" \
+      "Choose compression level (0-$maxlevel)" $((10+$maxlevel)) 40 $(($maxlevel + 1)) \
+      "${choices[@]}" \
+      3>&1 1>&2 2>&3`
+    if [[ $? != 0 ]]; then
+      exit 2  # user canceled
+    fi
+  else
+    clear; echo -e "$summary"
+    read -e -p "compression level (0-$maxlevel): " -i "$lastcompression" compression
+  fi
 done
 
 # ===Chapters===
+if [[ "$noconfirm" == "1" ]]; then
+  chapters=$lastchapters
+fi
 while true; do
-  clear; echo -e "$summary"
-  read -e -p "chapters (yes/no/chapternumber to continue with): " -i "$lastchapters" chapters
+  # check
+  if [[ "$chapters" =~ ^[0-9]+$ ]]; then
+    summary="$summary""\nchapters: $chapters"
+    call="$call -c --continue ${chapters}"
+    break
+  fi
   case "$chapters" in
-    ^[0-9]+$  ) summary="$summary""\nchapters: $chapters"; call="$call -c --continue ${chapters}"; break;;
-    yes       ) summary="$summary""\nchapters: $chapters"; call="$call -c"; break;;
-    no        ) summary="$summary""\nchapters: $chapters"; call="$call -s"; break;;
+    yes  ) summary="$summary""\nchapters: $chapters"; call="$call -c"; break;;
+    no   ) summary="$summary""\nchapters: $chapters"; call="$call -s"; break;;
   esac
+  # ask
+  if [[ "$dialog" ]]; then
+    continuetext="continue with chapter x"
+    chapters=`$dialog --title "Chapters" --menu --default-item "yes" \
+      "Split into chapters?" 11 40 3 \
+      "yes" "" \
+      "no"  "" \
+      "$continuetext" "" \
+      3>&1 1>&2 2>&3`
+    if [[ $? != 0 ]]; then
+      exit 2  # user canceled
+    fi
+    if [[ "$chapters" == "$continuetext" ]]; then
+      while true; do
+        chapters=`$dialog --title "Chapters" --cancel-button "back" \
+          --inputbox "With which chapter should continued?" 8 40 \
+          3>&1 1>&2 2>&3`
+        if [[ "$?" == 1 ]]; then
+          chapters="back"  # back to chapter menu
+          break
+        fi
+        if [[ "$chapters" =~ ^[0-9]+$ ]]; then
+          break
+        fi
+      done
+    fi
+  else
+    clear; echo -e "$summary"
+    read -e -p "chapters (yes/no/chapternumber to continue with): " -i "$lastchapters" chapters
+  fi
 done
 
 # ===Authcode===
+if [[ "$noconfirm" == "1" ]]; then
+  authcode=$lastauthcode
+fi
 if ! [ -r .authcode ] || [ -r ~/.authcode ]; then
-  clear; echo -e "$summary"
-  read -e -p "Authcode: " -i "$lastauthcode" authcode
-  summary="$summary""\nauthcode: $authcode"
-  call="$call -A $authcode"
+  while true; do
+    # check
+    if [[ "$authcode" != "" ]]; then
+      summary="$summary""\nauthcode: $authcode"
+      call="$call -A $authcode"
+      break
+    fi
+    # ask
+    if [[ "$dialog" ]]; then
+      authcode=`$dialog --title "Authcode" --inputbox "What is your authorization code (authcode)?" 8 40 3>&1 1>&2 2>&3`
+      if [[ $? != 0 ]]; then
+        exit 2  # user canceled
+      fi
+    else
+      clear; echo -e "$summary"
+      read -e -p "Authcode: " -i "$lastauthcode" authcode
+    fi
+  done
 fi
 
 # ===Loglevel===
+if [[ "$noconfirm" == "1" ]]; then
+  loglevel=$lastloglevel
+fi
 while true; do
-  clear; echo -e "$summary"
-  read -e -p "loglevel (0/1/2/3): " -i "$lastloglevel" loglevel
+  # check
   if [[ $loglevel =~ ^[0-9]+$ ]] && [[ "$loglevel" -ge "0" ]] && [[ "$loglevel" -le "3" ]]; then
     summary="$summary""\nloglevel: $loglevel"
     call="$call -l $loglevel"
     break
   fi
+  # ask
+  if [[ "$dialog" ]]; then
+    loglevel=`$dialog --title "Loglevel" --menu --default-item "$lastloglevel" \
+      "Choose loglevel" 12 30 4 \
+      "0"  ""  \
+      "1"  ""  \
+      "2"  ""  \
+      "3"  ""  \
+      3>&1 1>&2 2>&3`
+    if [[ $? != 0 ]]; then
+      exit 2  # user canceled
+    fi
+  else
+    clear; echo -e "$summary"
+    read -e -p "loglevel (0/1/2/3): " -i "$lastloglevel" loglevel
+  fi
 done
 
 # ===File===
-clear; echo -e "$summary"
-read -p "aax-file: " file
-file="${file%\'}" #remove suffix ' if file is given via drag'n'drop
-file="${file#\'}" #remove prefix ' if file is given via drag'n'drop
-savefile="$summary"
-summary="$summary""\naax-file: $file"
-call="$call $(echo $file | $SED "s;~;$HOME;")"
+while true; do
+  # ask
+  if [[ "$dialog" ]]; then
+    file=`$dialog --title "File" --inputbox "Which aax file should be converted?" 8 60 3>&1 1>&2 2>&3`
+    if [[ $? != 0 ]]; then
+      exit 2  # user canceled
+    fi
+  else
+    clear; echo -e "$summary"
+    read -p "aax-file: " file
+  fi
+  # check
+  file="${file%\'}"  # remove suffix ' if file is given via drag'n'drop
+  file="${file#\'}"  # remove prefix ' if file is given via drag'n'drop
+  file="$(echo $file | $SED "s;~;$HOME;")"
+  if [[ -r "$file" && "${file##*.}" == "aax" ]]; then
+    summary="$summary""\naax-file: $file"
+    call="$call $file"
+    break
+  fi
+done
 
 # ===Summerize chosen options and call AAXtoMP3===================================================================================================
 
+savefile="$summary"
+
 # ===Summary===
-clear; echo -e "$summary\n"
-echo -e "$call\n"
+if [[ "$dialog" ]]; then
+  read -d '' message << EOF
+Please confirm your selection. Everything okay?
+
+$(echo -e $summary)
+
+$call
+EOF
+  $dialog --title "Summary" --yesno "$message" 20 80
+  if [[ $? != 0 ]]; then
+    exit 2  # user canceled
+  fi
+else
+  clear; echo -e "$summary\n"
+  echo -e "$call\n"
+fi
 
 # ===Save chosen options===
-echo -e $savefile | $SED "s;\ level:;:;" > .interactivesave
+if [[ "$noclobber" == "0" || ! -e "$config" ]]; then
+  echo -e $savefile | $SED "s;\ level:;:;" > "$config"
+fi
 
 # ===Call AAXtoMP3===
 $call
