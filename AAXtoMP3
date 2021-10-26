@@ -8,7 +8,7 @@
 usage=$'\nUsage: AAXtoMP3 [--flac] [--aac] [--opus ] [--single] [--level <COMPRESSIONLEVEL>]
 [--chaptered [--keep-single-file-output]] [-e:mp3] [-e:m4a] [-e:m4b] [--authcode <AUTHCODE>] [--no-clobber]
 [--target_dir <PATH>] [--complete_dir <PATH>] [--validate] [--loglevel <LOGLEVEL>]
-[--keep-author <N>] [--author <AUTHOR>] [--{dir,file,chapter}-naming-scheme <STRING>]  
+[--keep-author <N>] [--author <AUTHOR>] [--{dir,file,chapter,title}-naming-scheme <STRING>]  
 [--use-audible-cli-data] [--continue <CHAPTERNUMBER>] {FILES}\n'
 codec=libmp3lame            # Default encoder.
 extension=mp3               # Default encoder extension.
@@ -23,6 +23,8 @@ fileNameScheme=             # Custom file naming scheme, default is $title
 customFNS=0
 chapterNameScheme=          # Custom chapter naming scheme, default is '$title-$(printf %0${#chaptercount}d $chapternum) $chapter' (BookTitle-01 Chapter 1)
 customCNS=0
+titleNameScheme=            # Custom title naming scheme, default is $title
+customTNS=0
 completedir=                # Optional location to move aax files once the decoding is complete.
 container=mp3               # Just in case we need to change the container.  Used for M4A to M4B
 VALIDATE=0                  # Validate the input aax file(s) only.  No Transcoding of files will occur
@@ -66,8 +68,10 @@ while true; do
     -D | --dir-naming-scheme ) dirNameScheme="$2"; customDNS=1;                         shift 2 ;;
                       # Use a custom file naming scheme, with variables.
     -F | --file-naming-scheme ) fileNameScheme="$2"; customFNS=1;                       shift 2 ;;
-                       # Use a custom chapter naming scheme, with variables.
+                      # Use a custom chapter naming scheme, with variables.
     --chapter-naming-scheme ) chapterNameScheme="$2"; customCNS=1;                      shift 2 ;;
+                      # Use a custom title nameing scheme, with variables.
+    --title-naming-scheme ) titleNameScheme="$2"; customTNS=1;                          shift 2 ;;
                       # Move the AAX file to a new directory when decoding is complete.
     -C | --complete_dir ) completedir="$2";                                             shift 2 ;;
                       # Authorization code associate with the AAX file(s)
@@ -643,7 +647,15 @@ do
     fi
   fi
   title=$(get_metadata_value title)
-  title=${title:0:128}
+  # The formatting of the title name.
+  # Manipulate the title.
+  if [ "${customTNS}" == "1" ]; then
+    title="$(eval echo "${titleNameScheme}")"
+  else
+    # The Default
+    title="$(echo "$title" | $SED 's/'\:'/'-'/g' | $SED 's/- /-/g' | xargs -0)"
+    title="${title:0:128}"
+  fi
   bitrate="$(get_bitrate)k"
   album="$(get_metadata_value album)"
   album_date="$(get_metadata_value date)"

@@ -56,6 +56,7 @@ bash interactiveAAXtoMP3 [-a|--advanced] [-h|--help]
 * **--dir-naming-scheme &lt;STRING&gt;** or **-D**      Use a custom directory naming scheme, with variables. See [below](#custom-naming-scheme) for more info.
 * **--file-naming-scheme &lt;STRING&gt;** or **-F**    Use a custom file naming scheme, with variables. See [below](#custom-naming-scheme) for more info.
 * **--chapter-naming-scheme &lt;STRING&gt;**  Use a custom chapter naming scheme, with variables. See [below](#custom-naming-scheme) for more info.
+* **--title-naming-scheme &lt;STRING&gt;**  Use a custom title naming scheme, with variables. See [below](#custom-naming-scheme) for more info.
 * **--use-audible-cli-data** Use additional data got with mkb79/audible-cli. See [below](#audible-cli-integration) for more info. Needed for the files in the `aaxc` format.
 * **--ffmpeg-path**  Set the ffmpeg/ffprobe binaries folder. Both of them must be executable and in the same folder.
 
@@ -136,12 +137,14 @@ The following flags can modify the default naming scheme:
 * **--dir-naming-scheme** or **-D**  
 * **--file-naming-scheme** or **-F** 
 * **--chapter-naming-scheme** 
+* **--title-naming-scheme**
 
 Each flag takes a string as argument. If the string contains a variable defined in the script (eg. artist, title, chapter, narrator...), the corresponding value is used.
 The default options correspond to the following flags:
 * `--dir-naming-scheme '$genre/$artist/$title'`
 * `--file-naming-scheme '$title'`
 * `--chapter-naming-scheme '$title-$(printf %0${#chaptercount}d $chapternum) $chapter'`
+* `--title-naming-scheme '$(echo "$title" | $SED 's/'\:'/'-'/g' | $SED 's/- /-/g' | xargs -0)'` and limit it to 100 characters.
 
 Additional notes:
 * If a command substitution is present in the passed string, (for example `$(printf %0${#chaptercount}d $chapternum)`, used to pad with zeros the chapter number), the commands are executed.
@@ -151,6 +154,31 @@ So you can use `--dir-naming-scheme '$(date +%Y)/$artist'`, but using `--file-na
 * If you want shorter chapter names, use `--chapter-naming-scheme '$(printf %0${#chaptercount}d $chapternum) $chapter'`: only chapter number and chapter name
 * If you want to append the narrator name to the title, use `--dir-naming-scheme '$genre/$artist/$title-$narrator' --file-naming-scheme '$title-$narrator'`
 * If you don't want to have the books separated by author, use `--dir-naming-scheme '$genre/$title'`
+* If you want to set a custom title, use `--title-naming-scheme 'my title'`
+* If you want to manipulate the title via an external script, use `--title-naming-scheme './my-script.sh title $title'`
+
+Script Example:
+```bash
+#!/usr/bin/env bash
+
+key="$1"
+value="$2"
+
+# -----
+# Formated title.
+get_title() {
+  # The Default Procedure
+  title="$value"
+  title="$(echo "$title" | $SED 's/'\:'/'-'/g' | $SED 's/- /-/g' | xargs -0)"
+  title="${title:0:100}"
+  echo "${title}"
+}
+
+case "$key" in
+            # print formated title
+  title     ) get_title;                shift ;;
+esac
+```
 
 ### Installing Dependencies.
 In general, take a look at [command-not-found.com](https://command-not-found.com/)
